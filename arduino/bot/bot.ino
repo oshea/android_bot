@@ -25,28 +25,64 @@ void setup() {
 void loop() {
   setSpeed(100);
 
-
   if (Serial.available() > 0) {
-    incomingByte = Serial.read();
+    cmd = Serial.readStringUntil(';');
+    op = getValue(cmd, ',', 0);
+    params = getValue(cmd, ',', 1);
 
+    switch (op) {
+      case 'F':
+        moveForward(params);
+        break;
+      case 'B':
+        moveBackward(params);
+        break;
+      case 'S':
+        stop(params);
+        break;
+      case 'L':
+        turnLeft(params);
+        break;
+      case 'R':
+        turnRight(params);
+        break;
+      default:
+        // DO NOTHING
+        break;
+    }
     Serial.print("Received: ");
     Serial.println(incomingByte, DEC);
   }
 
-  
+
 
 //    BLRun(Cmd::Release);
 //    FLRun(Cmd::Release);
 //
 //    BRRun(Cmd::Forward);
-//    FRRun(Cmd::Forward); 
+//    FRRun(Cmd::Forward);
 }
 
 void setSpeed(int speed) {
-  backLeft->setSpeed(speed); 
-  backRight->setSpeed(speed); 
-  frontLeft->setSpeed(speed); 
-  frontRight->setSpeed(speed); 
+  backLeft->setSpeed(speed);
+  backRight->setSpeed(speed);
+  frontLeft->setSpeed(speed);
+  frontRight->setSpeed(speed);
+}
+
+String getValue(String data, char separator, int index) {
+    int found = 0;
+    int strIndex[] = { 0, -1 };
+    int maxIndex = data.length() - 1;
+
+    for (int i = 0; i <= maxIndex && found <= index; i++) {
+        if (data.charAt(i) == separator || i == maxIndex) {
+            found++;
+            strIndex[0] = strIndex[1] + 1;
+            strIndex[1] = (i == maxIndex) ? i+1 : i;
+        }
+    }
+    return found > index ? data.substring(strIndex[0], strIndex[1]) : "";
 }
 
 
