@@ -1,6 +1,7 @@
-#include <QueueList.h>
 #include <Wire.h>
 #include <Adafruit_MotorShield.h>
+
+#include "Queue.h"
 
 Adafruit_MotorShield AFMS = Adafruit_MotorShield(); 
 // Adafruit_MotorShield AFMS = Adafruit_MotorShield(0x61); with a different I2C address (say for stacking)
@@ -26,7 +27,8 @@ struct Command {
 unsigned int left_encoder_target;
 unsigned int right_encoder_target;
 
-QueueList <Command> command_queue;
+//QueueList <Command> command_queue;
+Queue<Command> command_queue = Queue<Command>(10);
 
 void init_motor(Adafruit_DCMotor *motor) {
   motor->setSpeed(150);
@@ -52,7 +54,7 @@ void check_encoder_targets() {
   if(has_active_target()) {
     if(left_encoder_target <= left_front_encoder_counter && right_encoder_target <= right_front_encoder_counter) {
       Serial.println("Encoder targets reached");
-      stop_all_motors();
+//      stop_all_motors();
       left_encoder_target = 0;
       right_encoder_target = 0;  
     }
@@ -134,18 +136,18 @@ void run_diagnostics() {
 // 
 //  process_command(Command { 0 });
 //  delay(1000);
-//
+
 
   process_command(Command { 1, 100 });
-//  process_command(Command { 2, 100 });
-//  process_command(Command { 1, 300 });
-//  process_command(Command { 2, 300 });
+  process_command(Command { 2, 100 });
+  process_command(Command { 1, 300 });
+  process_command(Command { 2, 300 });
 }
 
 void process_command(Command cmd) {
   if(has_active_target()) {
     // Do nothing and put cmd in the queue
-//    command_queue.push(cmd);
+    command_queue.push(cmd);
     Serial.print("Queuing command: ");
     Serial.println(cmd.type);
     return;
@@ -201,21 +203,25 @@ void setup() {
 
   left_encoder_target = 0;
   right_encoder_target = 0;
+
+  run_diagnostics();
 }
 
 void loop() {
   if(has_active_target()) {
     // Do nothing
 //    Serial.print("active target ");
-//    Serial.println(left_encoder_target);
-    
-//  } else if(!command_queue.isEmpty()) {
-  } else if(false) {
+//    Serial.print(left_encoder_target);
+//    Serial.print(" current count ");
+//    Serial.println(left_front_encoder_counter);
+  } else if(command_queue.count() > 0) {
     Serial.println("Pulling command off queue");
     process_command(command_queue.pop());
   } else {
+    Serial.println("No active target or commands");
+    stop_all_motors();
     // Put diagnostic commands on the queue
-    Serial.println("Running diagnostic commands");
-    run_diagnostics();
+//    Serial.println("Running diagnostic commands");
+//    run_diagnostics();
   }
 }
