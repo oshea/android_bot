@@ -1,41 +1,35 @@
 #include <Wire.h>
-#include <Adafruit_MotorShield.h>
-
 #include "Queue.h"
 
-Adafruit_MotorShield AFMS = Adafruit_MotorShield(); 
-// Adafruit_MotorShield AFMS = Adafruit_MotorShield(0x61); with a different I2C address (say for stacking)
+#define DEBUG 0
 
-Adafruit_DCMotor *left_front_motor = AFMS.getMotor(1);
-Adafruit_DCMotor *right_front_motor = AFMS.getMotor(2);
-Adafruit_DCMotor *left_back_motor = AFMS.getMotor(3);
-Adafruit_DCMotor *right_back_motor = AFMS.getMotor(4);
+#define MOTOR_I2C_ADDRESS 4
 
-unsigned int left_front_encoder_counter = 0;
-unsigned int right_front_encoder_counter = 0;
+#define LEFT_MOTOR_SPEED_PIN 11
+#define LEFT_MOTOR_DIRECTION_A_PIN 13
+#define LEFT_MOTOR_DIRECTION_B_PIN 12
+#define RIGHT_MOTOR_SPEED_PIN 8
+#define RIGHT_MOTOR_DIRECTION_A_PIN 7
+#define RIGHT_MOTOR_DIRECTION_B_PIN 6
+#define LEFT_ENCODER_PIN 3
+#define RIGHT_ENCODER_PIN 2
 
-unsigned int left_front_encoder_pin = 2;
-unsigned int right_front_encoder_pin = 3;
+#define TICKS_PER_DEGREE 1
+
+
+unsigned long left_front_encoder_counter = 0;
+unsigned long right_front_encoder_counter = 0;
+unsigned int left_encoder_target;
+unsigned int right_encoder_target;
 
 struct Command {
-  byte type;
-  word distance;
+  int type;
+  int distance;
   int speed;
   int turn_degrees; 
 };
 
-unsigned int left_encoder_target;
-unsigned int right_encoder_target;
-
-//QueueList <Command> command_queue;
 Queue<Command> command_queue = Queue<Command>(10);
-
-void init_motor(Adafruit_DCMotor *motor) {
-  motor->setSpeed(150);
-  motor->run(FORWARD);
-  motor->setSpeed(0);
-  motor->run(RELEASE);  
-}
 
 void count_left_encoder() {
 //  Serial.println("Left tick");
@@ -66,59 +60,51 @@ bool has_active_target() {
 }
 
 void go_forward() {
-  left_front_motor->run(FORWARD);
-  left_front_motor->setSpeed(150);
+  digitalWrite(LEFT_MOTOR_DIRECTION_A_PIN, HIGH);
+  digitalWrite(LEFT_MOTOR_DIRECTION_B_PIN, LOW);
+  analogWrite(LEFT_MOTOR_SPEED_PIN, 200);
 
-  right_front_motor->run(FORWARD);
-  right_front_motor->setSpeed(150);
-
-  left_back_motor->run(FORWARD);
-  left_back_motor->setSpeed(150);
-
-  right_back_motor->run(FORWARD);
-  right_back_motor->setSpeed(150);
+  digitalWrite(RIGHT_MOTOR_DIRECTION_A_PIN, HIGH);
+  digitalWrite(RIGHT_MOTOR_DIRECTION_B_PIN, LOW);
+  analogWrite(RIGHT_MOTOR_SPEED_PIN, 200);
 }
 
 void go_backward() {
-  left_front_motor->run(BACKWARD);
-  left_front_motor->setSpeed(150);
+  digitalWrite(LEFT_MOTOR_DIRECTION_A_PIN, LOW);
+  digitalWrite(LEFT_MOTOR_DIRECTION_B_PIN, HIGH);
+  analogWrite(LEFT_MOTOR_SPEED_PIN, 200);
 
-  right_front_motor->run(BACKWARD);
-  right_front_motor->setSpeed(150);
-
-  left_back_motor->run(BACKWARD);
-  left_back_motor->setSpeed(150);
-
-  right_back_motor->run(BACKWARD);
-  right_back_motor->setSpeed(150);  
+  digitalWrite(RIGHT_MOTOR_DIRECTION_A_PIN, LOW);
+  digitalWrite(RIGHT_MOTOR_DIRECTION_B_PIN, HIGH);
+  analogWrite(RIGHT_MOTOR_SPEED_PIN, 200);
 }
 
 void stop_all_motors() {
-  left_front_motor->setSpeed(0);
-  left_front_motor->run(RELEASE);
+  digitalWrite(LEFT_MOTOR_DIRECTION_A_PIN, LOW);
+  digitalWrite(LEFT_MOTOR_DIRECTION_B_PIN, LOW);
+  analogWrite(LEFT_MOTOR_SPEED_PIN, 0);
 
-  right_front_motor->setSpeed(0);
-  right_front_motor->run(RELEASE);
-
-  left_back_motor->setSpeed(0);
-  left_back_motor->run(RELEASE);
-
-  right_back_motor->setSpeed(0);
-  right_back_motor->run(RELEASE);
+  digitalWrite(RIGHT_MOTOR_DIRECTION_A_PIN, LOW);
+  digitalWrite(RIGHT_MOTOR_DIRECTION_B_PIN, LOW);
+  analogWrite(RIGHT_MOTOR_SPEED_PIN, 0);
 }
 
-void turn_in_place() {
-  left_front_motor->run(FORWARD);
-  left_front_motor->setSpeed(50);
+void turn_in_place(int target_degrees) {
+//  Serial.print("Right counter: ");
+//  Serial.println(right_front_encoder_counter);
+  right_encoder_target = right_front_encoder_counter + (int)(target_degrees * TICKS_PER_DEGREE);
+  left_encoder_target = left_front_encoder_counter + (int)(target_degrees * TICKS_PER_DEGREE);
 
-  right_front_motor->run(BACKWARD);
-  right_front_motor->setSpeed(50);
+//  Serial.print("Right target: ");
+//  Serial.println(right_encoder_target);
+  
+  digitalWrite(LEFT_MOTOR_DIRECTION_A_PIN, HIGH);
+  digitalWrite(LEFT_MOTOR_DIRECTION_B_PIN, LOW);
+  analogWrite(LEFT_MOTOR_SPEED_PIN, 150);
 
-  left_back_motor->run(FORWARD);
-  left_back_motor->setSpeed(50);
-
-  right_back_motor->run(BACKWARD);
-  right_back_motor->setSpeed(50);  
+  digitalWrite(RIGHT_MOTOR_DIRECTION_A_PIN, LOW);
+  digitalWrite(RIGHT_MOTOR_DIRECTION_B_PIN, HIGH);
+  analogWrite(RIGHT_MOTOR_SPEED_PIN, 150);
 }
 
 void run_diagnostics() {
@@ -138,10 +124,17 @@ void run_diagnostics() {
 //  delay(1000);
 
 
-  process_command(Command { 1, 100 });
-  process_command(Command { 2, 100 });
-  process_command(Command { 1, 300 });
-  process_command(Command { 2, 300 });
+  process_command(Command { 1, 50 });
+  process_command(Command { 2, 50 });
+  process_command(Command { 3, 0, 0, 90 });
+  process_command(Command { 1, 50 });
+  process_command(Command { 2, 50 });
+  process_command(Command { 3, 0, 0, 180 });
+  process_command(Command { 1, 50 });
+  process_command(Command { 2, 50 });
+  process_command(Command { 3, 0, 0, 90 });
+  process_command(Command { 1, 50 });
+  process_command(Command { 2, 50 });
 }
 
 void process_command(Command cmd) {
@@ -180,7 +173,7 @@ void process_command(Command cmd) {
     go_backward();
   } else if (cmd.type == 3) {
     stop_all_motors();
-    turn_in_place();
+    turn_in_place(cmd.turn_degrees);
   } else if (cmd.type == 4) {
     run_diagnostics();
   } else {
@@ -188,18 +181,56 @@ void process_command(Command cmd) {
   }
 }
 
+void receiveCommand(int howMany) {
+    int c = 0;
+    int cmd = 0;
+    int param1 = 0;
+    int param2 = 0;
+    int param3 = 0;
+    
+    while (Wire.available()) { // loop through all but the last
+      int val = Wire.read();
+      if(c == 0) {
+        cmd = val;
+      } else if (c == 1) {
+        param1 = val;
+      } else if (c == 2) {
+        param2 = val;
+      } else if (c == 3) {
+        param3 = val;
+      }
+
+      c++;
+    }
+
+    Serial.println("Received :");
+    Serial.println(cmd);
+    Serial.println(param1);
+    Serial.println(param2);
+    Serial.println(param3);
+
+    if(c==4) {
+      Command command = { cmd, param1, param2, param3 };
+      process_command(command);
+    }  
+}
+
 void setup() {
+//  Wire.begin(MOTOR_I2C_ADDRESS); 
+//  Wire.setClock(100000);
+//  Wire.onReceive(receiveCommand);`
+ 
   Serial.begin(9600);
-
-  AFMS.begin();  // create with the default frequency 1.6KHz
   
-  attachInterrupt(digitalPinToInterrupt(left_front_encoder_pin), count_left_encoder, RISING);
-  attachInterrupt(digitalPinToInterrupt(right_front_encoder_pin), count_right_encoder, RISING);
+  attachInterrupt(digitalPinToInterrupt(LEFT_ENCODER_PIN), count_left_encoder, RISING);
+  attachInterrupt(digitalPinToInterrupt(RIGHT_ENCODER_PIN), count_right_encoder, RISING);
 
-  init_motor(left_front_motor);
-  init_motor(right_front_motor);
-  init_motor(left_back_motor);
-  init_motor(right_back_motor);
+  pinMode(LEFT_MOTOR_SPEED_PIN, OUTPUT);
+  pinMode(LEFT_MOTOR_DIRECTION_A_PIN, OUTPUT);  
+  pinMode(LEFT_MOTOR_DIRECTION_B_PIN, OUTPUT);
+  pinMode(RIGHT_MOTOR_SPEED_PIN, OUTPUT);
+  pinMode(RIGHT_MOTOR_DIRECTION_A_PIN, OUTPUT);  
+  pinMode(RIGHT_MOTOR_DIRECTION_B_PIN, OUTPUT);
 
   left_encoder_target = 0;
   right_encoder_target = 0;
@@ -218,7 +249,7 @@ void loop() {
     Serial.println("Pulling command off queue");
     process_command(command_queue.pop());
   } else {
-    Serial.println("No active target or commands");
+//    Serial.println("No active target or commands");
     stop_all_motors();
     // Put diagnostic commands on the queue
 //    Serial.println("Running diagnostic commands");

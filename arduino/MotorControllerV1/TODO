@@ -1,0 +1,8 @@
+
+* Functionality
+☐ Priority of commands
+☐ I2C
+
+* Code Cleanup
+☐ Move pin values to const
+☐ Make command types const
