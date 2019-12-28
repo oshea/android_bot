@@ -1,9 +1,10 @@
+
 #include <Wire.h>
 #include "Queue.h"
 
 #define DEBUG 0
 
-#define MOTOR_I2C_ADDRESS 4
+#define MOTOR_I2C_ADDRESS 0x8
 
 #define LEFT_MOTOR_SPEED_PIN 11
 #define LEFT_MOTOR_DIRECTION_A_PIN 13
@@ -16,20 +17,47 @@
 
 #define TICKS_PER_DEGREE 1
 
+#define CMD_STOP 0
 
-unsigned long left_front_encoder_counter = 0;
-unsigned long right_front_encoder_counter = 0;
-unsigned int left_encoder_target;
-unsigned int right_encoder_target;
+#define CMD_DRIVE_FORWARD 1
+#define CMD_DRIVE_BACKWARD 2
+#define CMD_STOP_AND_TURN_RIGHT 3
+#define CMD_STOP_AND_TURN_LEFT 4
+
+#define CMD_DRIVE_FORWARD_DISTANCE 11
+#define CMD_DRIVE_BACKWARD_DISTANCE 12
+#define CMD_DRIVE_FORWARD_SPEED 13
+#define CMD_DRIVE_BACKWARD_SPEED 14
+#define CMD_STOP_AND_TURN_DEGREES 15
+
+#define CMD_RUN_DIAGNOSTICS 21
 
 struct Command {
-  int type;
+  byte type;
   int distance;
   int speed;
   int turn_degrees; 
 };
 
-Queue<Command> command_queue = Queue<Command>(10);
+union UnsignedLongBuffer {
+  unsigned long number;
+  byte bytes[4];
+};
+
+union IntBuffer {
+  int number;
+  byte bytes[2];
+};
+
+volatile unsigned long left_front_encoder_counter = 0;
+volatile unsigned long right_front_encoder_counter = 0;
+unsigned int left_encoder_target;
+unsigned int right_encoder_target;
+
+String last_status;
+bool perform_stop;
+
+volatile Queue<Command> command_queue = Queue<Command>(10);
 
 void count_left_encoder() {
 //  Serial.println("Left tick");
@@ -43,14 +71,13 @@ void count_right_encoder() {
   check_encoder_targets();
 } 
 
-
 void check_encoder_targets() {
   if(has_active_target()) {
     if(left_encoder_target <= left_front_encoder_counter && right_encoder_target <= right_front_encoder_counter) {
       Serial.println("Encoder targets reached");
-//      stop_all_motors();
       left_encoder_target = 0;
-      right_encoder_target = 0;  
+      right_encoder_target = 0; 
+      perform_stop = true; 
     }
   }
 }
@@ -89,7 +116,7 @@ void stop_all_motors() {
   analogWrite(RIGHT_MOTOR_SPEED_PIN, 0);
 }
 
-void turn_in_place(int target_degrees) {
+void turn_degrees(int target_degrees) {
 //  Serial.print("Right counter: ");
 //  Serial.println(right_front_encoder_counter);
   right_encoder_target = right_front_encoder_counter + (int)(target_degrees * TICKS_PER_DEGREE);
@@ -107,38 +134,57 @@ void turn_in_place(int target_degrees) {
   analogWrite(RIGHT_MOTOR_SPEED_PIN, 150);
 }
 
-void run_diagnostics() {
-//  process_command(Command { 1 });
-//  delay(1000);
-//  
-//  process_command(Command { 0 });
-//  delay(1000);
-//  
-//  process_command(Command { 2 });
-//  delay(1000);
-//
-//  process_command(Command { 3 });
-//  delay(1000);  
-// 
-//  process_command(Command { 0 });
-//  delay(1000);
+void turn_left() {
+  digitalWrite(LEFT_MOTOR_DIRECTION_A_PIN, LOW);
+  digitalWrite(LEFT_MOTOR_DIRECTION_B_PIN, HIGH);
+  analogWrite(LEFT_MOTOR_SPEED_PIN, 150);
 
-
-  process_command(Command { 1, 50 });
-  process_command(Command { 2, 50 });
-  process_command(Command { 3, 0, 0, 90 });
-  process_command(Command { 1, 50 });
-  process_command(Command { 2, 50 });
-  process_command(Command { 3, 0, 0, 180 });
-  process_command(Command { 1, 50 });
-  process_command(Command { 2, 50 });
-  process_command(Command { 3, 0, 0, 90 });
-  process_command(Command { 1, 50 });
-  process_command(Command { 2, 50 });
+  digitalWrite(RIGHT_MOTOR_DIRECTION_A_PIN, HIGH);
+  digitalWrite(RIGHT_MOTOR_DIRECTION_B_PIN, LOW);
+  analogWrite(RIGHT_MOTOR_SPEED_PIN, 150);
 }
 
-void process_command(Command cmd) {
-  if(has_active_target()) {
+void turn_right() {
+  digitalWrite(LEFT_MOTOR_DIRECTION_A_PIN, HIGH);
+  digitalWrite(LEFT_MOTOR_DIRECTION_B_PIN, LOW);
+  analogWrite(LEFT_MOTOR_SPEED_PIN, 150);
+
+  digitalWrite(RIGHT_MOTOR_DIRECTION_A_PIN, LOW);
+  digitalWrite(RIGHT_MOTOR_DIRECTION_B_PIN, HIGH);
+  analogWrite(RIGHT_MOTOR_SPEED_PIN, 150);
+}
+
+void run_diagnostics() {
+  process_command(Command { CMD_DRIVE_FORWARD}, false);
+  delay(100);
+
+  process_command(Command { CMD_DRIVE_BACKWARD}, false);
+  delay(100);
+  
+  process_command(Command { CMD_DRIVE_FORWARD_DISTANCE, 50 }, false);
+  process_command(Command { CMD_DRIVE_BACKWARD_DISTANCE, 50 }, false);
+  process_command(Command { CMD_STOP_AND_TURN_DEGREES, 0, 0, 90 }, false);
+  process_command(Command { CMD_DRIVE_FORWARD_DISTANCE, 50 }, false);
+  process_command(Command { CMD_DRIVE_BACKWARD_DISTANCE, 50 }, false);
+  process_command(Command { CMD_STOP_AND_TURN_DEGREES, 0, 0, 180 }, false);
+  process_command(Command { CMD_DRIVE_FORWARD_DISTANCE, 50 }, false);
+  process_command(Command { CMD_DRIVE_BACKWARD_DISTANCE, 50 }, false);
+  process_command(Command { CMD_STOP_AND_TURN_DEGREES, 0, 0, 90 }, false);
+  process_command(Command { CMD_DRIVE_FORWARD_DISTANCE, 50 }, false);
+  process_command(Command { CMD_DRIVE_BACKWARD_DISTANCE, 50 }, false);
+}
+
+void print_status(String s) {
+  if(s == last_status) {
+    return;
+  }
+
+  Serial.println(s);
+  last_status = s;
+}
+
+void process_command(Command cmd, bool force_queue) {
+  if(has_active_target() || force_queue) {
     // Do nothing and put cmd in the queue
     command_queue.push(cmd);
     Serial.print("Queuing command: ");
@@ -149,76 +195,82 @@ void process_command(Command cmd) {
   Serial.print("Running command:");
   Serial.println(cmd.type);
 
-  if (cmd.type == 0 ) {
-    // Stop
+  if (cmd.type == CMD_STOP) {
     stop_all_motors();
-  } else if(cmd.type == 1 && cmd.distance > 0) { 
-    //Forward with distance
-    //Set motor and monitor ticks
+  } else if (cmd.type == CMD_DRIVE_FORWARD) {
+    go_forward();
+  } else if (cmd.type == CMD_DRIVE_FORWARD_DISTANCE) { 
     right_encoder_target = right_front_encoder_counter + cmd.distance;
     left_encoder_target = left_front_encoder_counter + cmd.distance;
     go_forward();
-  } else if (cmd.type == 1) {
-    //Forward with no distance
-    //Set motor clear current command
-    go_forward();
-  } else if (cmd.type == 2 && cmd.distance > 0) {
-    //Backword with distance
-    //Set motor and monitor ticks
+  } else if (cmd.type == CMD_DRIVE_BACKWARD) {
+    go_backward();
+  } else if (cmd.type == CMD_DRIVE_BACKWARD_DISTANCE) {
     right_encoder_target = right_front_encoder_counter + cmd.distance;
     left_encoder_target = left_front_encoder_counter + cmd.distance;
     go_backward();  
-  } else if (cmd.type == 2) {
-    //Backward with no distance
-    go_backward();
-  } else if (cmd.type == 3) {
+  } else if (cmd.type == CMD_STOP_AND_TURN_LEFT) {
     stop_all_motors();
-    turn_in_place(cmd.turn_degrees);
-  } else if (cmd.type == 4) {
+    turn_left();
+  } else if (cmd.type == CMD_STOP_AND_TURN_RIGHT) {
+    stop_all_motors();
+    turn_right();
+  } else if (cmd.type == CMD_STOP_AND_TURN_DEGREES) {
+    stop_all_motors();
+    turn_degrees(cmd.turn_degrees);
+  } else if (cmd.type == CMD_RUN_DIAGNOSTICS) {
     run_diagnostics();
   } else {
     stop_all_motors();
   }
 }
 
-void receiveCommand(int howMany) {
-    int c = 0;
-    int cmd = 0;
-    int param1 = 0;
-    int param2 = 0;
-    int param3 = 0;
+void receiveCommand(int byte_count) {
+    int counter = 0;
     
-    while (Wire.available()) { // loop through all but the last
-      int val = Wire.read();
-      if(c == 0) {
-        cmd = val;
-      } else if (c == 1) {
-        param1 = val;
-      } else if (c == 2) {
-        param2 = val;
-      } else if (c == 3) {
-        param3 = val;
-      }
+    byte cmd_type = Wire.read();
+    byte cmd_data[byte_count - 1];
 
-      c++;
+    Serial.print("Received command: ");
+    Serial.println(cmd_type);
+
+    Command command = { cmd_type };
+
+    while (Wire.available()) {
+      byte val = Wire.read();
+      cmd_data[counter] = val;
+      counter++;
     }
 
-    Serial.println("Received :");
-    Serial.println(cmd);
-    Serial.println(param1);
-    Serial.println(param2);
-    Serial.println(param3);
+    Serial.print("Received bytes:");
+    Serial.println(counter);
 
-    if(c==4) {
-      Command command = { cmd, param1, param2, param3 };
-      process_command(command);
-    }  
+    if(cmd_type == CMD_DRIVE_FORWARD_DISTANCE || cmd_type == CMD_DRIVE_BACKWARD_DISTANCE) {
+      UnsignedLongBuffer distance;
+      distance.number = 0;
+
+      // Take every byte up to 4 and put in the array
+      for (size_t i = 0; i < 4; i++) {
+        if(i < byte_count) {
+          Serial.println(i);
+          Serial.println(cmd_data[i]);
+          distance.bytes[i] = cmd_data[i];
+        }
+      }
+      command.distance = (unsigned long)distance.number;
+
+      Serial.print("Received distance: ");
+      Serial.println(distance.number);
+      Serial.println(command.distance);
+    }
+
+    process_command(command, true);
 }
 
 void setup() {
-//  Wire.begin(MOTOR_I2C_ADDRESS); 
-//  Wire.setClock(100000);
-//  Wire.onReceive(receiveCommand);`
+  Wire.begin(MOTOR_I2C_ADDRESS); 
+  Wire.setClock(100000);
+  Wire.onReceive(receiveCommand);
  
   Serial.begin(9600);
   
@@ -235,24 +287,24 @@ void setup() {
   left_encoder_target = 0;
   right_encoder_target = 0;
 
-  run_diagnostics();
+  // run_diagnostics();
+
+  perform_stop = false;
 }
 
 void loop() {
-  if(has_active_target()) {
-    // Do nothing
-//    Serial.print("active target ");
-//    Serial.print(left_encoder_target);
-//    Serial.print(" current count ");
-//    Serial.println(left_front_encoder_counter);
-  } else if(command_queue.count() > 0) {
-    Serial.println("Pulling command off queue");
-    process_command(command_queue.pop());
-  } else {
-//    Serial.println("No active target or commands");
+  if(perform_stop) {
+    print_status("Stopping");
     stop_all_motors();
-    // Put diagnostic commands on the queue
-//    Serial.println("Running diagnostic commands");
-//    run_diagnostics();
+    perform_stop = false;
+  } else if(has_active_target()) {
+    // String target_string = "active target: ";
+    // String current_string = " current count: ";
+    // print_status(target_string + left_encoder_target + current_string + left_front_encoder_counter);
+  } else if(command_queue.count() > 0) {
+    print_status("Pulling command off queue");
+    process_command(command_queue.pop(), false);
+  } else {
+    print_status("No active targets");
   }
 }
