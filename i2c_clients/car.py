@@ -23,6 +23,12 @@ CMD_STOP_AND_TURN_DEGREES = 15
 
 CMD_DELAY_PER_BYTE = 0.1
 
+def twos_complement(val, bits):
+    if (val & (1 << (bits - 1))) != 0:
+        val = val - (1 << bits)
+    return val
+    
+
 def long_to_bytes(val):
     bin_str = "{:032b}".format(val)
     byte_strs = list(map(''.join, zip(*[iter(bin_str)] * 8)))
@@ -31,6 +37,7 @@ def long_to_bytes(val):
     return byte_list
 
 def int_to_bytes(val):
+    if val < 1: val = twos_complement(val, 16)
     bin_str = "{:016b}".format(val)
     byte_strs = list(map(''.join, zip(*[iter(bin_str)] * 8)))
     byte_list = [int(b, 2) for b in byte_strs]
@@ -62,7 +69,7 @@ def drive_backward_distance(distance):
 
 def turn_degrees(degree):
     degree_bytes = int_to_bytes(degree)
-    bus.write_i2c_block_data(MOTOR_ADDRESS, CMD_STOP_AND_TURN_DEGREES, [degree_bytes])
+    bus.write_i2c_block_data(MOTOR_ADDRESS, CMD_STOP_AND_TURN_DEGREES, degree_bytes)
     time.sleep(CMD_DELAY_PER_BYTE * 3)
 
 
@@ -82,6 +89,7 @@ def stop():
 
 
 def interactive_loop():
+    print('Interactive mode')
     last_key = None
     while True:
         key = getkey()
@@ -96,6 +104,7 @@ def interactive_loop():
         elif key == keys.SPACE:
             stop()
         elif key == 'q':
+            print()
             break
         else:
             pass
@@ -105,7 +114,7 @@ def interactive_loop():
     
 def command_loop():
     while True:
-        cmd = input("> ")
+        cmd = raw_input("Enter command > ")
         parts = cmd.split(':')
         
         cmd_type = parts[0]
@@ -113,7 +122,7 @@ def command_loop():
         
         param1 = None
         if len(parts) >= 2: param1 = parts[1]
-        
+
         if cmd_type == 'i':
             interactive_loop()
         elif cmd_type == 'f':
@@ -142,7 +151,8 @@ def command_loop():
 
 if __name__ == "__main__":
     command_loop()
-
+    #print(int_to_bytes(100))
+    #print(int_to_bytes(-100))
 
 
 
