@@ -23,21 +23,18 @@ CMD_STOP_AND_TURN_DEGREES = 15
 
 CMD_DELAY_PER_BYTE = 0.1
 
-def twos_complement(val, bits):
-    if (val & (1 << (bits - 1))) != 0:
-        val = val - (1 << bits)
-    return val
-    
-
-def long_to_bytes(val):
+def uint32_to_bytes(val):
     bin_str = "{:032b}".format(val)
     byte_strs = list(map(''.join, zip(*[iter(bin_str)] * 8)))
     byte_list = [int(b, 2) for b in byte_strs]
     byte_list.reverse()
     return byte_list
 
-def int_to_bytes(val):
-    if val < 1: val = twos_complement(val, 16)
+def int16_to_bytes(val):
+    if val < 1:
+        val = val * -1
+        val = (val ^ 0xFFFF) + 1
+    
     bin_str = "{:016b}".format(val)
     byte_strs = list(map(''.join, zip(*[iter(bin_str)] * 8)))
     byte_list = [int(b, 2) for b in byte_strs]
@@ -51,7 +48,7 @@ def drive_forward():
 
 
 def drive_forward_distance(distance):
-    distance_bytes = long_to_bytes(distance)
+    distance_bytes = uint32_to_bytes(distance)
     bus.write_i2c_block_data(MOTOR_ADDRESS, CMD_DRIVE_FORWARD_DISTANCE, distance_bytes)
     time.sleep(CMD_DELAY_PER_BYTE * 5)
 
@@ -62,13 +59,13 @@ def drive_backward():
 
 
 def drive_backward_distance(distance):
-    distance_bytes = long_to_bytes(distance)
+    distance_bytes = uint32_to_bytes(distance)
     bus.write_i2c_block_data(MOTOR_ADDRESS, CMD_DRIVE_BACKWARD_DISTANCE, distance_bytes)
     time.sleep(CMD_DELAY_PER_BYTE * 5)
 
 
 def turn_degrees(degree):
-    degree_bytes = int_to_bytes(degree)
+    degree_bytes = int16_to_bytes(degree)
     bus.write_i2c_block_data(MOTOR_ADDRESS, CMD_STOP_AND_TURN_DEGREES, degree_bytes)
     time.sleep(CMD_DELAY_PER_BYTE * 3)
 
