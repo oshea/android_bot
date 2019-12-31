@@ -117,21 +117,38 @@ void stop_all_motors() {
 }
 
 void turn_degrees(int target_degrees) {
+  // TODO: clean up this method
 //  Serial.print("Right counter: ");
 //  Serial.println(right_front_encoder_counter);
+  bool negative_degrees = false;
+  if(target_degrees < 0) {
+    negative_degrees = true;
+    target_degrees = target_degrees * -1;
+  }
+
   right_encoder_target = right_front_encoder_counter + (int)(target_degrees * TICKS_PER_DEGREE);
   left_encoder_target = left_front_encoder_counter + (int)(target_degrees * TICKS_PER_DEGREE);
 
 //  Serial.print("Right target: ");
 //  Serial.println(right_encoder_target);
   
-  digitalWrite(LEFT_MOTOR_DIRECTION_A_PIN, HIGH);
-  digitalWrite(LEFT_MOTOR_DIRECTION_B_PIN, LOW);
-  analogWrite(LEFT_MOTOR_SPEED_PIN, 150);
+  if (negative_degrees) {
+    digitalWrite(LEFT_MOTOR_DIRECTION_A_PIN, LOW);
+    digitalWrite(LEFT_MOTOR_DIRECTION_B_PIN, HIGH);
+    analogWrite(LEFT_MOTOR_SPEED_PIN, 150);
 
-  digitalWrite(RIGHT_MOTOR_DIRECTION_A_PIN, LOW);
-  digitalWrite(RIGHT_MOTOR_DIRECTION_B_PIN, HIGH);
-  analogWrite(RIGHT_MOTOR_SPEED_PIN, 150);
+    digitalWrite(RIGHT_MOTOR_DIRECTION_A_PIN, HIGH);
+    digitalWrite(RIGHT_MOTOR_DIRECTION_B_PIN, LOW);
+    analogWrite(RIGHT_MOTOR_SPEED_PIN, 150);
+  } else {
+    digitalWrite(LEFT_MOTOR_DIRECTION_A_PIN, HIGH);
+    digitalWrite(LEFT_MOTOR_DIRECTION_B_PIN, LOW);
+    analogWrite(LEFT_MOTOR_SPEED_PIN, 150);
+
+    digitalWrite(RIGHT_MOTOR_DIRECTION_A_PIN, LOW);
+    digitalWrite(RIGHT_MOTOR_DIRECTION_B_PIN, HIGH);
+    analogWrite(RIGHT_MOTOR_SPEED_PIN, 150);
+  }
 }
 
 void turn_left() {
@@ -184,7 +201,11 @@ void print_status(String s) {
 }
 
 void process_command(Command cmd, bool force_queue) {
-  if(has_active_target() || force_queue) {
+  if(cmd.type == CMD_STOP) {
+    perform_stop = true;
+    command_queue.clear();
+    return;
+  } else if(has_active_target() || force_queue) {
     // Do nothing and put cmd in the queue
     command_queue.push(cmd);
     Serial.print("Queuing command: ");
@@ -229,6 +250,7 @@ void receiveCommand(int byte_count) {
     int counter = 0;
     
     byte cmd_type = Wire.read();
+
     byte cmd_data[byte_count - 1];
 
     Serial.print("Received command: ");
@@ -245,7 +267,7 @@ void receiveCommand(int byte_count) {
     Serial.print("Received bytes:");
     Serial.println(counter);
 
-    if(cmd_type == CMD_DRIVE_FORWARD_DISTANCE || cmd_type == CMD_DRIVE_BACKWARD_DISTANCE) {
+    if (cmd_type == CMD_DRIVE_FORWARD_DISTANCE || cmd_type == CMD_DRIVE_BACKWARD_DISTANCE) {
       UnsignedLongBuffer distance;
       distance.number = 0;
 
@@ -262,6 +284,23 @@ void receiveCommand(int byte_count) {
       Serial.print("Received distance: ");
       Serial.println(distance.number);
       Serial.println(command.distance);
+    } else if (cmd_type == CMD_STOP_AND_TURN_DEGREES) {
+      IntBuffer degrees;
+      degrees.number = 0;
+
+      for (size_t i = 0; i < 2; i++) {
+        if(i < byte_count) {
+          Serial.println(i);
+          Serial.println(cmd_data[i]);
+          degrees.bytes[i] = cmd_data[i];
+        }
+      }
+
+      command.turn_degrees = (int)degrees.number;
+
+      Serial.print("Received degrees: ");
+      Serial.println(degrees.number);
+      Serial.println(command.turn_degrees);
     }
 
     process_command(command, true);
