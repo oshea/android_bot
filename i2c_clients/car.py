@@ -31,7 +31,7 @@ def uint32_to_bytes(val):
     return byte_list
 
 def int16_to_bytes(val):
-    if val < 1:
+    if val < 0:
         val = val * -1
         val = (val ^ 0xFFFF) + 1
     
